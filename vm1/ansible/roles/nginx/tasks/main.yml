@@ -1,0 +1,10 @@
+---
+- name: Update & Upgrade Ubuntu
+  apt:
+    update_cache: True
+    upgrade: yes
+
+- name: Install nginx
+  apt:
+    name: nginx
+    state: latest
