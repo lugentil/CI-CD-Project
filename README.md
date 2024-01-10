@@ -1,0 +1,1 @@
+# Após subir as VM's 1 e 2 é necessário realizar a criação do Node para o jenkins-agent e posteriormente realizar 1 acesso ssh da VM1 para a VM2 para realizar a criação do known_hosts e colocá-lo no diretório: /var/lib/jenkins/.ssh/known_hosts

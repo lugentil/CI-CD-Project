@@ -1,0 +1,55 @@
+---
+- name: Update & Upgrade Ubuntu
+  apt:
+    update_cache: True
+    upgrade: yes
+
+- name: Install nginx
+  apt:
+    name: nginx
+    state: latest
+
+- name: Configuring nginx.conf
+  lineinfile:
+    path: /etc/nginx/sites-available/jenkins.conf
+    line: "upstream jenkins
+    {
+    server 127.0.0.1:8080;
+}
+
+server{
+    listen 80;
+    server_name jenkins.dev.com;
+
+    access_log /var/log/nginx/jenkins.access.log;
+    error_log /var/log/nginx/jenkins.error.log;
+
+    proxy_buffers 16 64k;
+    proxy_buffer_size 128k;
+
+    location / {
+        proxy_pass http://jenkins;
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        proxy_redirect off;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+
+}"
+    create: yes
+- name: Criando link simbólico em sites-available
+  file:
+    src: /etc/nginx/sites-available/jenkins.conf
+    dest: /etc/nginx/sites-enabled/jenkins.conf
+    owner: root
+    group: root
+    state: link
+
+- name: Reiniciando NGINX
+  service:
+    name: nginx
+    state: restarted
+    daemon_reload: true

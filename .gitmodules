@@ -1,0 +1,3 @@
+[submodule "Application Sample"]
+	path = Application Sample
+	url = https://github.com/dmancloud/complete-prodcution-e2e-pipeline-github-actions.git

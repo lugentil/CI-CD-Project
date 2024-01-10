@@ -1,0 +1,52 @@
+---
+- name: Adicionando keyring do Jenkins
+  get_url:
+    url: https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key
+    dest: /usr/share/keyrings/jenkins-keyring.asc
+
+- name: Adicionando Jenkins ao rep do Linux
+  shell: echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc]   https://pkg.jenkins.io/debian binary/ | sudo tee   /etc/apt/sources.list.d/jenkins.list > /dev/null
+  register: result
+
+- name: Comando Linux utilizado
+  debug:
+    msg: 
+    - "'{{result}}'"
+
+- name: Instalando Java para a utilização do Jenkins
+  apt:
+    name: openjdk-17-jre-headless
+
+- name: Instalando o navegador Firefox para acesso ao Jenkins
+  apt:
+    name: firefox
+
+- name: Baixando as atualizações do sistema para a instalação do Jenkins
+  apt:
+    update_cache: True
+    upgrade: yes
+
+- name: Instalando o Jenkins
+  apt:
+    name: jenkins
+
+- name: Inserir senha para primeiro acesso no Jenkins...
+  shell: echo
+  notify: 
+    - pausar
+
+- meta: flush_handlers
+
+- name: Instalando Plugins necessários do Jenkins
+  community.general.jenkins_plugin:
+    name: Maven Integration
+    name: Pipeline Maven Integration
+    name: Eclipse Temurin Installer
+    url_username: admin
+    url_password: $6$rwWO1qxfW/3FwMGX$rD87u0DGQlrsoXcT7K50II6cf5zvDdosYV8KpaHXyYlR6aLpTam/THjlOMFg41rnflRJ.s8YO0JT7FePtScpt
+    url: localhost:8080
+
+- name: Restart service httpd, in all cases
+  service:
+    name: jenkins
+    state: restarted

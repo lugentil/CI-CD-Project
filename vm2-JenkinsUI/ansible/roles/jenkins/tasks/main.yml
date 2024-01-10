@@ -1,0 +1,48 @@
+- name: Baixando as atualizações do sistema para a configuração do Usuário
+  apt:
+    update_cache: True
+    upgrade: yes
+
+- name: Criando usuário Jenkins
+  user:
+    name: jenkins
+    uid: 1040
+    group: root
+    password: $6$0UeNZfPpajwH6W/O$y3fMZVidXf36/aAvmwSOdSISSOYk6zDUK2LZTFpCvT5ycQ3m/aPBzmkOM/pOF.qNqXWPDCmCM2ILmNofvSEFO0
+
+- name: Instalando Java para a utilização do Jenkins
+  apt:
+    name: openjdk-17-jre-headless
+
+- name: Realizando a instalação do Docker
+  apt:
+    name: docker
+
+- name: Realizando a instalação do Docker-Compose
+  apt:
+    name: docker-compose
+
+- name: Criando grupo "docker"
+  group:
+    name: docker
+    state: present
+
+- name: Adicionando o usuário jenkins ao grupo "docker" e "sudo"
+  user:
+    name: jenkins
+    shell: /bin/bash
+    groups: docker,sudo
+    append: yes
+
+- name: Adicionando pasta ssh para acesso
+  become_user: jenkins
+  file:
+    path: ~/.ssh/
+    state: directory
+    mode: '0755'
+
+- name: Criando chave SSH
+  become_user: jenkins
+  shell: cd ~/.ssh/; ssh-keygen -t rsa -m PEM -C "Jenkins agent key" -f "jenkinsAgent_rsa";
+    cat jenkinsAgent_rsa.pub >> ~/.ssh/authorized_keys;
+    chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys ~/.ssh/jenkinsAgent_rsa;

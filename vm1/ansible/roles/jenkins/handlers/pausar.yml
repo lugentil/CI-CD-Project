@@ -1,0 +1,4 @@
+- name: pausar
+  pause:
+    prompt: Por gentileza, realizar o login no Jenkins para realizar a ativação e posteriormente
+            pressione uma tecla para continuar o script.
