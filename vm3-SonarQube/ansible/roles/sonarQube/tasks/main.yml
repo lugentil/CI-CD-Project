@@ -1,0 +1,68 @@
+- name: Baixando as atualizações do sistema
+  apt:
+    update_cache: True
+    upgrade: yes
+
+- name: Instalando wget
+  apt:
+    name: wget
+
+#- name: Configurando rep do PostrgreSQL
+# shell: sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list';
+#         wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+
+
+- name: Atualizando sistema
+  become: yes
+  apt:
+    update_cache: True
+    upgrade: yes
+
+- name: Instalando PostgreSQL
+  apt:
+    name: postgresql 
+    name: postgresql-contrib
+
+- name: Definindo senha para o usuário postgres
+  user:
+    name: postgres
+    update_password: always 
+    password: $6$eAbjvkn2MCidpPbE$jYkX3QoWsjU9LbDnVpDhT94lKh53qex/g9tgZjC8XMe51U.SZVA7e9STEw7TG1LBcjPLVYyd5xfA.R9Mz2dC30
+
+- name: Instalando python3-psycopg2
+  apt:
+    name: python3-psycopg2
+
+- name: Adicionando o user postgres como root para executar os comandos no ansible
+  ansible.builtin.user:
+    name: postgres
+    shell: /bin/bash
+    groups: root
+    append: yes
+
+- name: Instalando Java para a utilização do Jenkins
+  apt:
+    name: openjdk-17-jre-headless
+
+- name: Instalar unzip
+  apt: 
+    name: unzip
+
+- name: Baixar e descompactar sonarqube
+  shell: sudo wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-9.9.0.65466.zip;
+         sudo unzip sonarqube-9.9.0.65466.zip -d /opt; sudo mv /opt/sonarqube-9.9.0.65466 /opt/sonarqube;
+
+- name: Criar usuário e definir permissões
+  user: 
+    name: sonar
+    password: $6$eAbjvkn2MCidpPbE$jYkX3QoWsjU9LbDnVpDhT94lKh53qex/g9tgZjC8XMe51U.SZVA7e9STEw7TG1LBcjPLVYyd5xfA.R9Mz2dC30 
+    comment: Usuário para rodar SonarQube
+
+- name: Definindo permissão de acesso ao dir do SonarQube
+  become: yes
+  file:
+    path: /opt/sonarqube
+    state: directory
+    recurse: yes
+    owner: sonar
+    group: sonar
