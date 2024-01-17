@@ -1,0 +1,253 @@
+---
+- name: Curl command
+  shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server" sh -s - --disable traefik
+  
+- name: Creating kubernetes dir
+  file:
+    path: /home/vagrant/.kube
+    state: directory
+    mode: '0755'
+
+- name: Adicionando o usuário Lucas e colocando-o no grupo de root
+  ansible.builtin.user:
+    name: lucas
+    comment: Lucas
+    uid: 1040
+    groups: root,sudo
+
+- name: Trocando o dono do arquivo /etc/rancher/k3s/k3s.yaml para o Vagrant
+# Trocando para permitir executar o próximo passo
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/k3s.yaml
+    owner: vagrant
+    group: root
+
+- name: Configurando pasta do kubernetes 
+  become: true
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: /home/vagrant/.kube/config
+    mode: '400' 
+    owner: lucas
+    group: sudo
+
+- name: Criando namespace kubernetes
+  kubernetes.core.k8s:
+    name: argocd
+    api_version: v1
+    kind: Namespace
+    state: present
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+
+- name: kubectl apply argocd
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    dest: /home/vagrant/metrics-server.yaml
+    mode: '0664'
+
+- name: Create a Deployment by reading the definition from a local file
+  kubernetes.core.k8s:
+    namespace: argocd
+    state: present  
+    src: /home/vagrant/metrics-server.yaml    
+  environment:
+    KUBECONFIG: /home/vagrant/.kube/config
+
+- name: Editando o serviço argocd-server (Definindo tipo do serviço de ClusterIP para NodePort)
+  kubernetes.core.k8s:
+    state: patched
+    kind: Service
+    namespace: argocd 
+    name: argocd-server
+    definition:
+      spec:
+        type: NodePort
+  environment:
+   KUBECONFIG: /home/vagrant/.kube/config
+
+- name: Editando o serviço argocd-server (Definindo IP de acesso externo)
+  kubernetes.core.k8s:
+    state: patched
+    kind: Service
+    namespace: argocd 
+    name: argocd-server
+    definition:
+      spec:
+        externalIPs: "192.168.0.243"
+  environment:
+   KUBECONFIG: /home/vagrant/.kube/config
+
+- name: Recolhendo secret - argocd-initial-admin-secret
+  kubernetes.core.k8s_info:
+    api_version: v1  
+    kind: Secret
+    name: argocd-initial-admin-secret
+    namespace: argocd
+  environment:
+   KUBECONFIG: /home/vagrant/.kube/config
+   foundmatch: ("[A-Za-z]+[0-9]+[A-Za-z]+[0-9]+==") ## Acertar a REGEX dps
+  register: teste
+
+- name: Pegando secret e descriptografando
+  become: true
+  shell: kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath="{.data.password}" | base64 -d
+  register: resultado
+
+- name: debugers
+  debug:
+    var: resultado
+
+- name: Installing the cert-manager CustomResourceDefinition resources.
+  get_url:
+    url: https://github.com/cert-manager/cert-manager/releases/download/v1.13.3/cert-manager.crds.yaml
+    dest: /home/vagrant/cert-manager.crds.yaml
+    mode: '0664'    
+
+- name: Instalando Helm
+  community.general.snap:
+    name:
+      - helm
+    classic: true
+
+- name: Configurando helm
+  become: true
+  shell: kubectl config view --raw > /home/vagrant/.kube/config
+
+- name: Adicionar repositório do jetstack
+  kubernetes.core.helm_repository:
+    name: jetstack
+    repo_url: "https://charts.jetstack.io"
+
+# Criar namespace antes para evitar erro.
+- name: Fazendo Deploy da última versão do chart jetstack dentro do namespace cert-manager, criando-o.
+  become: true
+  kubernetes.core.helm:
+    name: cert-manager
+    chart_ref: jetstack/cert-manager
+    chart_version: 1.13.3
+    release_namespace: my-release
+    create_namespace: true
+    skip_crds: false
+  environment:
+   KUBECONFIG: /home/vagrant/.kube/config
+
+- name: Criando o arquivo de config do cert-manager
+  blockinfile:
+    path: /home/vagrant/.kube/letsencrypt-product.yaml
+    create: true
+    block: |
+      apiVersion: cert-manager.io/v1
+      kind: ClusterIssuer
+      metadata:
+        name: letsencrypt-prod
+      spec:
+        acme:
+          server: https://acme-v02.api.letsencrypt.org/directory
+          email: admin@admin.com
+          privateKeySecretRef:
+            name: letsencrypt-prod
+          solvers:
+            - http01:
+                ingress:
+                  class: nginx
+
+
+- name: Aplicando manifest relativo ao nginx.
+  ansible.builtin.get_url:
+    url: https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.7.0/deploy/static/provider/cloud/deploy.yaml
+    dest: /home/vagrant/deploy.yaml
+    mode: '0664'
+
+- name: Aguardar 30 segundos para inicialização do nginx
+  pause:
+    seconds: 30
+
+- name: Aplicando metrics-server manifest no cluster.
+  kubernetes.core.k8s:
+    state: present
+    src: /home/vagrant/deploy.yaml
+  environment:
+   KUBECONFIG: /home/vagrant/.kube/config
+
+
+- name: Criando o arquivo de config do cert-manager
+  blockinfile:
+    path: /home/vagrant/.kube/ingress.yaml
+    create: true
+    block: |
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: argocd-server-ingress
+        namespace: argocd
+        annotations:
+          cert-manager.io/cluster-issuer: letsencrypt-prod
+          kubernetes.io/ingress.class: nginx
+          kubernetes.io/tls-acme: "true"
+          nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+          # If you encounter a redirect loop or are getting a 307 response code
+          # then you need to force the nginx ingress to connect to the backend using HTTPS.
+          #
+          nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+      spec:
+        rules:
+        - host: argocd.developer
+          http:
+            paths:
+            - path: /
+              pathType: Prefix
+              backend:
+                service:
+                  name: argocd-server
+                  port:
+                    name: https
+        tls:
+        - hosts:
+          - argocd.developer
+          secretName: argocd-secret # do not change, this is provided by Argo CD
+
+- name: Aplicando metrics-server manifest no cluster (ingress-nginx)
+  kubernetes.core.k8s:
+    state: present
+    src: /home/vagrant/.kube/ingress.yaml
+  environment:
+   KUBECONFIG: /home/vagrant/.kube/config
+
+- name: Criando o arquivo de config app-cluster
+  blockinfile:
+    path: /home/vagrant/.kube/app-cluster.yaml
+    create: true
+    block: |
+      apiVersion: v1
+      clusters:
+      - cluster:
+          certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkekNDQVIyZ0F3SUJBZ0lCQURBS0JnZ3Foa2pPUFFRREFqQWpNU0V3SHdZRFZRUUREQmhyTTNNdGMyVnkKZG1WeUxXTmhRREUzTURVME1qUXlOamt3SGhjTk1qUXdNVEUyTVRZMU56UTVXaGNOTXpRd01URXpNVFkxTnpRNQpXakFqTVNFd0h3WURWUVFEREJock0zTXRjMlZ5ZG1WeUxXTmhRREUzTURVME1qUXlOamt3V1RBVEJnY3Foa2pPClBRSUJCZ2dxaGtqT1BRTUJCd05DQUFTeGxQWmRMcVovVjBmWmlzejZWYWhiV3ZjcDRPME9uUnArMlVRa3hUYlkKTXQvWEdEYXQ4TnFPWmJqOUlmOTQrWFFtYWVsYTB0ZmdtcksyR0l5amNrWXNvMEl3UURBT0JnTlZIUThCQWY4RQpCQU1DQXFRd0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVXpjbUF0cUJTU3V6VXFkWGpiOG1TCk9BWXg2cDB3Q2dZSUtvWkl6ajBFQXdJRFNBQXdSUUloQVBqUWxXalVWWUdPd1BTNVp4VnBaK3ZZR2g1bXhteFUKajg5VHV6aS9TRXBYQWlCbW54QlI5am55REtPWUdIV0QvMnQ3YlhVcGR2UUo4bzJlbWgvQkdpT3pMdz09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+          server: https://192.168.50.200:6443
+        name: default
+      contexts:
+      - context:
+          cluster: default
+          user: default
+        name: default
+      current-context: default
+      kind: Config
+      preferences: {}
+      users:
+      - name: default
+        user:
+          client-certificate-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJrRENDQVRlZ0F3SUJBZ0lJZjVFYU1aRTc0RHd3Q2dZSUtvWkl6ajBFQXdJd0l6RWhNQjhHQTFVRUF3d1kKYXpOekxXTnNhV1Z1ZEMxallVQXhOekExTkRJME1qWTVNQjRYRFRJME1ERXhOakUyTlRjME9Wb1hEVEkxTURFeApOVEUyTlRjME9Wb3dNREVYTUJVR0ExVUVDaE1PYzNsemRHVnRPbTFoYzNSbGNuTXhGVEFUQmdOVkJBTVRESE41CmMzUmxiVHBoWkcxcGJqQlpNQk1HQnlxR1NNNDlBZ0VHQ0NxR1NNNDlBd0VIQTBJQUJKajZWSVRSMkNjblFIMVQKZTNGMG0ybkk5aSt3cEVuM1dNekROYnU1OERQTi83R2dXMk0zQVlVZXEwalNGZnlxbnpsU3NJNGswdnVJaldiUQpqbnRRNDR1alNEQkdNQTRHQTFVZER3RUIvd1FFQXdJRm9EQVRCZ05WSFNVRUREQUtCZ2dyQmdFRkJRY0RBakFmCkJnTlZIU01FR0RBV2dCU1hMVEJNM2hGUUM1TVNmbEhGc2lPenNFb25makFLQmdncWhrak9QUVFEQWdOSEFEQkUKQWlBajFDYWd5cHg5M0FxMWtMSitVU1hpUmtzU09WYmc4OWk1bzJsSGpsQlJHUUlnQUlDbjJlOUZSN0QrblpKUgpucHFYZktUdGNqRDcwelNOUG1uSTk3UVgrSUU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0KLS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJkekNDQVIyZ0F3SUJBZ0lCQURBS0JnZ3Foa2pPUFFRREFqQWpNU0V3SHdZRFZRUUREQmhyTTNNdFkyeHAKWlc1MExXTmhRREUzTURVME1qUXlOamt3SGhjTk1qUXdNVEUyTVRZMU56UTVXaGNOTXpRd01URXpNVFkxTnpRNQpXakFqTVNFd0h3WURWUVFEREJock0zTXRZMnhwWlc1MExXTmhRREUzTURVME1qUXlOamt3V1RBVEJnY3Foa2pPClBRSUJCZ2dxaGtqT1BRTUJCd05DQUFTM2lxMzk4VnRleEY3ZFh0c2tsWllUMHFhUXZWWXBRTTF3YXo0bWZORzAKQTNWTm9kbWhlSUVZVFdYdm5ITEs0dU1YSDV5cmNmVTFRYXlPa2xUeGp5bVRvMEl3UURBT0JnTlZIUThCQWY4RQpCQU1DQXFRd0R3WURWUjBUQVFIL0JBVXdBd0VCL3pBZEJnTlZIUTRFRmdRVWx5MHdUTjRSVUF1VEVuNVJ4YklqCnM3QktKMzR3Q2dZSUtvWkl6ajBFQXdJRFNBQXdSUUloQU0xaXBTaXh4QkxZRW5rUmZ2NlkzRjE4MnF5Q2JKRHQKQ2ZSelJVSU1LWko0QWlCREFJQVlOR1ZUc2pQdEpBbnlrU1JENzJWZm44Qm9lMXpWVG0xd2tvS3A1UT09Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+          client-key-data: LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSURFRWpwYlFwdFRiSGROQXhNK0xaTWxYNjloaFZuWFZKWHNNN1ZIMjV4MnVvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFbVBwVWhOSFlKeWRBZlZON2NYU2JhY2oyTDdDa1NmZFl6TU0xdTdud004My9zYUJiWXpjQgpoUjZyU05JVi9LcWZPVkt3amlUUys0aU5adENPZTFEaml3PT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=
+    
+- name: Download argocd Command Line
+  get_url:
+    url: https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+    dest: /home/vagrant/argocd
+    mode: '0440'
+
+- name: Install argocd command line tool
+  become: true
+  shell: install -m 555 /home/vagrant/argocd /usr/local/bin/argocd
+  
+- name: Criando cluster através da CLI - Argocd
+  shell: argocd add default ubuntu-focal --name app-cluster

@@ -50,23 +50,21 @@ Vagrant.configure("2") do |config|
     v.customize ["modifyvm", :id, "--uartmode1", "file", File::NULL]
     v.customize ["modifyvm", :id, "--vram", "16"]  
     ## Configurações da VirtualBox
-    v.name = "vmJenkins"
-    v.memory = "4092"
-    v.cpus = 2
+    v.name = "vmKubernetes"
+    v.memory = "2048"
+    v.cpus = 1
 
   end
   
   # Definindo nome para a máquina para o Vagrant conseguir identificar
-  config.vm.define "jenkins" do |j|
+  config.vm.define "vmKubernetes" do |k|
     # Definindo o endereço IP da máquina virtual
-    j.vm.network "public_network", ip: "192.168.0.241" 
+    k.vm.network "public_network", ip: "192.168.0.244" 
   end
 
   config.vm.provision "shell", inline: <<-SHELL
     apt-get update
     apt-get install -y ansible; apt-get install net-tools openssh-server;
-    apt-get install ansible-galaxy collection install community.general # Extensão para instalar plugins no Jenkins
-    apt-get install ansible-galaxy collection install ansible.posix  # Extensão para realizar pause no playbook e realizar as configurações no Jenkins
     ansible-playbook --connection=local /ansible/playbook.yml
   SHELL
 end

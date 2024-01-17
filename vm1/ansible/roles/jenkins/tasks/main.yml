@@ -37,14 +37,91 @@
 
 - meta: flush_handlers
 
-- name: Instalando Plugins necessários do Jenkins
+- name: Instalando maven-plugin para o Jenkins
   community.general.jenkins_plugin:
-    name: Maven Integration
-    name: Pipeline Maven Integration
-    name: Eclipse Temurin Installer
+    name: maven-plugin
     url_username: admin
-    url_password: $6$rwWO1qxfW/3FwMGX$rD87u0DGQlrsoXcT7K50II6cf5zvDdosYV8KpaHXyYlR6aLpTam/THjlOMFg41rnflRJ.s8YO0JT7FePtScpt
-    url: localhost:8080
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando pipeline-maven para o Jenkins
+  community.general.jenkins_plugin:
+    name: pipeline-maven
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando adoptopenjdk para o Jenkins
+  community.general.jenkins_plugin:
+    name: adoptopenjdk
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando sonar-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: sonar
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando sonar-quality-gates-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: sonar-quality-gates
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando quality-gates-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: quality-gates
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando docker-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: docker-plugin
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando docker-commons-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: docker-commons
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando docker-workflow-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: docker-workflow
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando docker-build-step-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: docker-build-step
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando docker-java-api-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: docker-java-api
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+- name: Instalando docker-build-publish-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: docker-build-publish
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
+
+
 
 - name: Restart service httpd, in all cases
   service:

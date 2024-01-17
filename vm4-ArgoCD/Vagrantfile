@@ -1,0 +1,36 @@
+Vagrant.configure("2") do |config|
+  # Definindo a box com o Ubuntu 20.4 LTS
+  config.vm.box = "ubuntu/focal64"
+  config.vm.synced_folder "./ansible", "/ansible"
+  config.vm.provider "virtualbox" do |v|
+    v.gui = false
+    ## Parâmetros v.customize para retirar bug ao gerar SSH.
+    v.customize ["modifyvm", :id, "--uart1", "0x3F8", "4"]
+    v.customize ["modifyvm", :id, "--uartmode1", "file", File::NULL]
+    v.customize ["modifyvm", :id, "--vram", "16"]  
+    ## Configurações da VirtualBox
+    v.name = "vmArgo-CD"
+    v.memory = "2048"
+    v.cpus = 1
+
+  end
+  
+  # Definindo nome para a máquina para o Vagrant conseguir identificar
+  config.vm.define "argocd" do |a|
+    # Definindo o endereço IP da máquina virtual
+    a.vm.network "public_network", ip: "192.168.0.243"
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    apt-get update
+    apt-get install -y ansible; apt-get install net-tools openssh-server; 
+    apt-get install pip -y;
+    sudo pip install --upgrade pyyaml;
+    sudo pip install openshift pyyaml kubernetes;
+    sudo ansible-galaxy collection install kubernetes.core;
+    sudo ansible-galaxy collection install community.kubernetes;
+    sudo ansible-galaxy collection install cloud.common;
+    sudo ansible-galaxy collection install community.general;
+    sudo ansible-playbook --connection=local /ansible/playbook.yml
+  SHELL
+end

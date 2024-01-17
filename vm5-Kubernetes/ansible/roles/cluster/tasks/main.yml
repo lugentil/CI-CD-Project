@@ -1,0 +1,31 @@
+- name: Curl command
+  shell: curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="server" sh -s - --disable traefik
+  
+- name: Creating kubernetes dir
+  file:
+    path: /home/vagrant/.kube
+    state: directory
+    mode: '0755'
+
+- name: Adicionando o usuário Lucas e colocando-o no grupo de root
+  ansible.builtin.user:
+    name: lucas
+    comment: Lucas
+    uid: 1040
+    groups: root,sudo
+
+- name: Trocando o dono do arquivo /etc/rancher/k3s/k3s.yaml para o Vagrant
+# Trocando para permitir executar o próximo passo
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/k3s.yaml
+    owner: vagrant
+    group: root
+
+- name: Configurando pasta do kubernetes 
+  become: true
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: /home/vagrant/.kube/config
+    mode: '400' 
+    owner: lucas
+    group: sudo
