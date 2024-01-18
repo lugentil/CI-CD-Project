@@ -121,7 +121,12 @@
     url_password: 11fff88e86269cfd041cbd50b43d01e8d4
     url: http://localhost:8080
 
-
+- name: Instalando ssh-agent-plugin para o Jenkins
+  community.general.jenkins_plugin:
+    name: ssh-agent
+    url_username: admin
+    url_password: 11fff88e86269cfd041cbd50b43d01e8d4
+    url: http://localhost:8080
 
 - name: Restart service httpd, in all cases
   service:
