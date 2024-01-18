@@ -13,6 +13,8 @@ pipeline{
         DOCKER_PASSWORD = 'dockerhub'
         IMAGE_NAME = "${DOCKER_USER}" + "/" + "${APP_NAME}"
         IMAGE_TAG = "${RELEASE}-${BUILD_NUMBER}"
+        APP_NAME = "complete-prodcution-e2e-pipeline"
+        JENKINS_API_TOKEN = "${JENKINS_API_TOKEN}"
             }
     stages{
         stage("Cleanup Workspace"){
@@ -66,6 +68,14 @@ pipeline{
                     }
                 }
             }
-        }                                        
+        }   
+        stage("Trigger CD Pipeline"){
+            steps{
+                script{
+                        sh "curl -v -k --user admin:${JENKINS_API_TOKEN} -X POST -H 'cache-control: no-cache' -H 'content-type: application/x-www-form-urlencoded' --data 'IMAGE_TAG=${IMAGE_TAG}' 'http://192.168.0.241:8080/job/gitops-complete-pipeline/buildWithParameters?token=gitops-token'"
+                    }
+                }
+            }
+        }                                                
     }    
 }
